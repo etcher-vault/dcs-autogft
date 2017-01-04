@@ -50,6 +50,74 @@ function autogft_TaskForce:addGroup(count, type)
 end
 
 ---
+-- @param #autogft_TaskForce self
+-- @param #list<taskforceunit#autogft_TaskForceUnit> units
+function autogft_TaskForce:reinforceFromUnits(availableUnits)
+  local takenUnits = {}
+
+  local replacedUnitNameCounter = 0
+  local replacedGroupNameCounter = 0
+
+  local desiredUnits = {}
+  local groupIndex = 1
+  while groupIndex <= #self.groups and #takenUnits < #availableUnits do
+
+    local group = self.groups[groupIndex]
+    if not group:exists() then
+
+      local unitSpec = group.unitSpec
+
+      -- Obtain units from available units
+      local groupUnits = {}
+      local availableUnitIndex = 1
+      while #groupUnits < unitSpec.count and availableUnitIndex <= #availableUnits do
+        local unit = availableUnits[availableUnitIndex]
+        if not takenUnits[availableUnitIndex]
+          and unit.type == unitSpec.type then
+          groupUnits[#groupUnits + 1] = {
+            ["type"] = unit.type,
+            ["transportable"] =
+            {
+              ["randomTransportable"] = false,
+            },
+            ["x"] = unit.x,
+            ["y"] = unit.y,
+            ["heading"] = unit.heading,
+            ["name"] = unit.name,
+            ["skill"] = unit.skill,
+            ["playerCanDrive"] = true
+          }
+          takenUnits[availableUnitIndex] = true
+        end
+        availableUnitIndex = availableUnitIndex + 1
+      end
+
+      -- Add units to a group
+      if #groupUnits > 0 then
+        local groupName
+        -- Find a unique group name
+        while (not groupName) or Group.getByName(groupName) do
+          replacedGroupNameCounter = replacedGroupNameCounter + 1
+          groupName = "autogft group #" .. replacedGroupNameCounter
+        end
+        local dcsGroupData = {
+          ["route"] = {},
+          ["units"] = groupUnits,
+          ["name"] = groupName
+        }
+        -- Create a group
+        local dcsGroup = coalition.addGroup(self.country, Group.Category.GROUND, dcsGroupData)
+
+        -- Issue group to control zone
+        self.groups[groupIndex].dcsGroup = dcsGroup
+        self:moveGroupToTarget(dcsGroup)
+      end
+    end
+  end
+  return self
+end
+
+---
 -- Attempts to reinforce the task force according to its unit specifications.
 -- Reinforcing can either be done by spawning units, or assuming control of pre-existing units in the base zones.
 -- Reinforcing units will immidiately start moving towards current target zone.
