@@ -51,7 +51,7 @@ end
 
 ---
 -- @param #autogft_TaskForce self
--- @param #list<taskforceunit#autogft_TaskForceUnit> units
+-- @param #list<taskforceunit#autogft_TaskForceUnit> availableUnits
 function autogft_TaskForce:reinforceFromUnits(availableUnits)
   local takenUnits = {}
 
@@ -126,98 +126,27 @@ end
 -- @return #autogft_TaskForce This instance (self)
 function autogft_TaskForce:reinforce(useSpawning)
   self:assertValid()
-  -- If not spawning, use existing vehicles for as reinforcements
-  local availableUnits
-  local takenUnits
-  if not useSpawning then
-    availableUnits = autogft_getUnitsInZones(coalition.getCountryCoalition(self.country), self.baseZones)
-    takenUnits = {}
+
+  local needsReinforcements = false
+  local groupIndex = 1
+  while groupIndex <= #self.groups and not needsReinforcements do
+    if not self.groups[groupIndex]:exists() then needsReinforcements = true end
+    groupIndex = groupIndex + 1
   end
-  local spawnedUnitCount = 0
 
-  local replacedUnitNameCounter = 0
-  local replacedGroupNameCounter = 0
-
-  local desiredUnits = {}
-  for groupIndex = 1, #self.groups do
-
-    local group = self.groups[groupIndex]
-    if not group:exists() then
-
-      local unitSpec = group.unitSpec
-
-      local groupUnits = {}
-      local function addUnit(type, name, x, y, heading)
-        groupUnits[#groupUnits + 1] = {
-          ["type"] = type,
-          ["transportable"] =
-          {
-            ["randomTransportable"] = false,
-          },
-          ["x"] = x,
-          ["y"] = y,
-          ["heading"] = heading,
-          ["name"] = name,
-          ["skill"] = self.skill,
-          ["playerCanDrive"] = true
-        }
+  if needsReinforcements then
+    if useSpawning then
+      for _, group in pairs(self.groups) do
       end
-
-      -- Assign units to group
-      if useSpawning then
-        local spawnZoneIndex = math.random(#self.baseZones)
-        local spawnZone = trigger.misc.getZone(self.baseZones[spawnZoneIndex])
-
-        while #groupUnits < unitSpec.count do
-          local name
-          -- Find a unique unit name
-          while (not name) or Unit.getByName(name) do
-            replacedUnitNameCounter = replacedUnitNameCounter + 1
-            name = "autogft unit #" .. replacedUnitNameCounter
-          end
-          local x = spawnZone.point.x + 15 * spawnedUnitCount
-          local y = spawnZone.point.z - 15 * spawnedUnitCount
-          addUnit(unitSpec.type, name, x, y, 0)
-          spawnedUnitCount = spawnedUnitCount + 1
-        end
-      else
-        local availableUnitIndex = 1
-        while #groupUnits < unitSpec.count and availableUnitIndex <= #availableUnits do
-          local unit = availableUnits[availableUnitIndex]
-          if unit:isExist()
-            and not takenUnits[availableUnitIndex]
-            and unit:getTypeName() == unitSpec.type then
-            local x = unit:getPosition().p.x
-            local y = unit:getPosition().p.z
-            local heading = mist.getHeading(unit)
-            addUnit(unitSpec.type, unit:getName(), x, y, heading)
-            takenUnits[availableUnitIndex] = true
-          end
-          availableUnitIndex = availableUnitIndex + 1
-        end
-      end
-
-      if #groupUnits > 0 then
-        local groupName
-        -- Find a unique group name
-        while (not groupName) or Group.getByName(groupName) do
-          replacedGroupNameCounter = replacedGroupNameCounter + 1
-          groupName = "autogft group #" .. replacedGroupNameCounter
-        end
-        local dcsGroupData = {
-          ["route"] = {},
-          ["units"] = groupUnits,
-          ["name"] = groupName
-        }
-        -- Create a group
-        local dcsGroup = coalition.addGroup(self.country, Group.Category.GROUND, dcsGroupData)
-
-        -- Issue group to control zone
-        self.groups[groupIndex].dcsGroup = dcsGroup
-        self:moveGroupToTarget(dcsGroup)
+    else
+      local availableUnits, takenUnits
+      if not useSpawning then
+        availableUnits = autogft_getUnitsInZones(coalition.getCountryCoalition(self.country), self.baseZones)
+        if #availableUnits > 0 then self:reinforceFromUnits(availableUnits) end
       end
     end
   end
+
   return self
 end
 
